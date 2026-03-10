@@ -745,7 +745,7 @@ func (m model) renderListHelp() string {
 			{"Tab", "encounter"},
 		}
 
-		if len(m.spells) > 0 {
+		if len(m.spells) > 0 && m.cursor < len(m.spells) {
 			entry := &m.spells[m.cursor]
 			if entry.spell.BaseRank > 0 && entry.spell.HeightenDie > 0 {
 				bindings = append(bindings, binding{"+/-", "rank"})
