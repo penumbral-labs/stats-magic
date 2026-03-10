@@ -25,7 +25,7 @@ var brailleDotBits = [4][2]byte{
 // Each character cell is 2 dots wide x 4 dots tall, giving 2*width horizontal
 // and 4*height vertical resolution. Returns a slice of strings, one per row
 // (top to bottom), each already styled with a vertical color gradient.
-func RenderBrailleChart(pdf []float64, lo, hi float64, width, height int, gradient []lipgloss.Color) []string {
+func RenderBrailleChart(pdf []float64, width, height int, gradient []lipgloss.Color) []string {
 	if len(pdf) == 0 || width <= 0 || height <= 0 {
 		blank := strings.Repeat(" ", width)
 		rows := make([]string, height)
@@ -115,7 +115,7 @@ func RenderBrailleChart(pdf []float64, lo, hi float64, width, height int, gradie
 // RenderBrailleSparkline renders a single-row braille sparkline.
 // Each character covers 2 horizontal samples and 4 vertical levels,
 // giving 2x horizontal resolution compared to block-char sparklines.
-func RenderBrailleSparkline(pdf []float64, lo, hi float64, width int) string {
+func RenderBrailleSparkline(pdf []float64, width int) string {
 	if len(pdf) == 0 || width <= 0 {
 		return strings.Repeat(" ", width)
 	}

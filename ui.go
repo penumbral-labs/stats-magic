@@ -83,16 +83,18 @@ var barGradient = []lipgloss.Color{
 	lipgloss.Color("#e94560"),
 }
 
+// Save profile colors (from caster's perspective: low save = easy = green)
+var profileColors = [3]lipgloss.Color{
+	lipgloss.Color("#53d769"), // Low save → easy for caster
+	lipgloss.Color("#888899"), // Mod → neutral
+	lipgloss.Color("#e94560"), // High save → hard for caster
+}
+
 // ============================================================================
 // Panel Rendering — btop-style title-in-border
 // ============================================================================
 
-// renderPanel creates a bordered panel with the title embedded in the top border line.
-// Produces: ╭─ Title ─────────────╮
-//           │ content              │
-//           ╰──────────────────────╯
 func (m model) renderPanel(title string, w int, content string) string {
-	// Render body with 3-sided border (no top)
 	body := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderTop(false).
@@ -103,18 +105,21 @@ func (m model) renderPanel(title string, w int, content string) string {
 
 	outerW := lipgloss.Width(body)
 
-	// Build custom top border with embedded title
 	borderFg := lipgloss.NewStyle().Foreground(colorBorder)
 	titleFg := lipgloss.NewStyle().Foreground(colorTitle).Bold(true)
 
+	repeatCount := outerW - 2
+	if repeatCount < 0 {
+		repeatCount = 0
+	}
+
 	var top string
 	if title == "" {
-		top = borderFg.Render("╭" + strings.Repeat("─", outerW-2) + "╮")
+		top = borderFg.Render("╭" + strings.Repeat("─", repeatCount) + "╮")
 	} else {
 		titleStr := titleFg.Render(title)
 		titleW := lipgloss.Width(titleStr)
-		// ╭─ Title ──...──╮
-		dashes := outerW - titleW - 5 // 3 for "╭─ ", 1 for " ", 1 for "╮"
+		dashes := outerW - titleW - 5
 		if dashes < 1 {
 			dashes = 1
 		}
@@ -126,6 +131,41 @@ func (m model) renderPanel(title string, w int, content string) string {
 }
 
 // ============================================================================
+// Dynamic Layout
+// ============================================================================
+
+// leftWidth returns the outer width for the left column (encounter + spells + comparison).
+// Scales with terminal width instead of being capped at a fixed size.
+func (m model) leftWidth() int {
+	w := m.windowWidth * 55 / 100
+	if w < 56 {
+		w = 56
+	}
+	// Leave at least 38 for detail pane + margin
+	maxLeft := m.windowWidth - 38
+	if maxLeft < 56 {
+		maxLeft = 56
+	}
+	if w > maxLeft {
+		w = maxLeft
+	}
+	return w
+}
+
+func (m model) detailPaneWidth() int {
+	remaining := m.windowWidth - m.leftWidth() - 3
+	if remaining < 34 {
+		remaining = 34
+	}
+	return remaining
+}
+
+// leftContentWidth returns the usable width inside a left-column panel (after border + padding).
+func (m model) leftContentWidth() int {
+	return m.leftWidth() - 4
+}
+
+// ============================================================================
 // Main View — Single Page Layout
 // ============================================================================
 
@@ -133,13 +173,11 @@ func (m model) viewList() string {
 	help := m.renderListHelp()
 	helpH := lipgloss.Height(help)
 
-	// Available height for the main body (full window minus help bar)
 	bodyH := m.windowHeight - helpH
 	if bodyH < 10 {
 		bodyH = 10
 	}
 
-	// Render fixed-height components first to measure
 	encPanel := m.renderEncounterPanel()
 	encHeight := lipgloss.Height(encPanel)
 
@@ -162,9 +200,6 @@ func (m model) viewList() string {
 	var body string
 
 	if len(m.spells) > 0 {
-		// fixedHeight = encounter panel + comparison + flash (all measured with borders)
-		// spellListRows = content rows INSIDE the spell panel
-		// The spell panel adds 2 lines for borders (top + bottom), so subtract that too
 		fixedHeight := encHeight + compHeight + flashHeight
 		spellListRows := bodyH - fixedHeight - 2 // -2 for spell panel borders
 		if spellListRows < 5 {
@@ -206,86 +241,89 @@ func (m model) viewList() string {
 		body = lipgloss.JoinVertical(lipgloss.Left, encPanel, spellList)
 	}
 
-	// Ensure total output fits exactly in the window.
+	// Ensure total output fits exactly in the window (ANSI-safe via lipgloss).
 	bodyHeight := lipgloss.Height(body)
 	if bodyHeight < bodyH {
 		body += strings.Repeat("\n", bodyH-bodyHeight)
 	} else if bodyHeight > bodyH {
-		bodyLines := strings.Split(body, "\n")
-		if len(bodyLines) > bodyH {
-			bodyLines = bodyLines[:bodyH]
-		}
-		body = strings.Join(bodyLines, "\n")
+		body = lipgloss.NewStyle().MaxHeight(bodyH).Render(body)
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, body, help)
 }
 
-// leftWidth returns the outer width for both the encounter panel and spell list.
-func (m model) leftWidth() int {
-	w := m.windowWidth/2 + 4
-	if w < 56 {
-		w = 56
-	}
-	if w > 72 {
-		w = 72
-	}
-	return w
-}
-
-func (m model) detailPaneWidth() int {
-	remaining := m.windowWidth - m.leftWidth() - 5
-	if remaining < 34 {
-		remaining = 34
-	}
-	return remaining
-}
+// ============================================================================
+// Encounter Panel
+// ============================================================================
 
 func (m model) renderEncounterPanel() string {
-	encLabels := [encFieldCount]string{"Spell DC", "Attack Mod", "Reflex", "Fortitude", "Will", "AC"}
+	contentW := m.leftContentWidth()
 
-	renderField := func(idx int) string {
+	renderField := func(idx int, label string, extraWidth int) string {
 		focused := m.encFocus == idx
-		label := fmt.Sprintf("%-12s", encLabels[idx]+":")
+		paddedLabel := fmt.Sprintf("%-*s", 7+extraWidth, label+":")
+
 		indicator := "  "
 		labelStyle := styleLabel
 		if focused {
 			indicator = lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Render("> ")
 			labelStyle = lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
 		}
-		return indicator + labelStyle.Render(label) + m.encInputs[idx].View()
+		return indicator + labelStyle.Render(paddedLabel) + m.encInputs[idx].View()
 	}
 
-	youFields := []int{encSpellDC, encAttackMod}
-	enemyFields := []int{encRefMod, encFortMod, encWillMod, encEnemyAC}
+	renderSaveField := func(idx int, label string, profile SaveProfile) string {
+		focused := m.encFocus == idx
+		profStyle := lipgloss.NewStyle().Foreground(profileColors[profile])
+		profLabel := profStyle.Render(fmt.Sprintf("%-4s", profile.String()))
 
+		paddedLabel := fmt.Sprintf("%-7s", label+":")
+		indicator := "  "
+		labelStyle := styleLabel
+		if focused {
+			indicator = lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Render("> ")
+			labelStyle = lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
+		}
+		return indicator + labelStyle.Render(paddedLabel) + profLabel + " " + m.encInputs[idx].View()
+	}
+
+	// You column
 	var leftLines []string
 	leftLines = append(leftLines, styleLabel.Render("  You"))
-	for _, idx := range youFields {
-		leftLines = append(leftLines, renderField(idx))
-	}
+	leftLines = append(leftLines, renderField(encPCLevel, "Level", 0))
+	leftLines = append(leftLines, renderField(encSpellDC, "DC", 0))
+	leftLines = append(leftLines, renderField(encAttackMod, "Atk", 0))
 	leftCol := strings.Join(leftLines, "\n")
 
+	// Enemy column
 	var rightLines []string
 	rightLines = append(rightLines, styleLabel.Render("  Enemy"))
-	for _, idx := range enemyFields {
-		rightLines = append(rightLines, renderField(idx))
-	}
+	rightLines = append(rightLines, renderField(encEnemyAC, "AC", 0))
+	rightLines = append(rightLines, renderSaveField(encRefMod, "Ref", m.encounter.RefProfile))
+	rightLines = append(rightLines, renderSaveField(encFortMod, "Fort", m.encounter.FortProfile))
+	rightLines = append(rightLines, renderSaveField(encWillMod, "Will", m.encounter.WillProfile))
 	rightCol := strings.Join(rightLines, "\n")
 
-	colWidth := 28
+	colWidth := contentW / 2
+	if colWidth < 28 {
+		colWidth = 28
+	}
 	leftSized := lipgloss.NewStyle().Width(colWidth).Render(leftCol)
 	grid := lipgloss.JoinHorizontal(lipgloss.Top, leftSized, rightCol)
 
 	return m.renderPanel("Encounter", m.leftWidth(), grid)
 }
 
-// renderSpellListFixed renders the spell list panel with a fixed number of visible rows.
+// ============================================================================
+// Spell List Panel
+// ============================================================================
+
 func (m model) renderSpellListFixed(maxRows int) string {
 	w := m.leftWidth()
+	contentW := m.leftContentWidth()
 
 	if len(m.spells) == 0 {
-		empty := styleMuted.Render("  No spells yet. Press  a  to add from presets.")
+		empty := styleMuted.Render("  No spells yet. Press  a  to add from presets,  n  for custom.")
 		content := empty
 		padLines := maxRows - 1
 		if padLines > 0 {
@@ -301,14 +339,23 @@ func (m model) renderSpellListFixed(maxRows int) string {
 		}
 	}
 
+	// Dynamic sparkline width based on available space
 	sparkWidth := 16
+	// Name gets remaining space after spark + dice + damage + prefixes
+	nameWidth := contentW - sparkWidth - 16
+	if nameWidth < 10 {
+		nameWidth = 10
+	}
+	if nameWidth > 24 {
+		nameWidth = 24
+	}
 
 	var allLines []string
 	for i, e := range m.spells {
-		allLines = append(allLines, m.renderSpellRow(i, &e, sparkWidth, maxDmg))
+		allLines = append(allLines, m.renderSpellRow(i, &e, nameWidth, sparkWidth, maxDmg))
 	}
 
-	visibleRows := maxRows - 1 // subtract for title-in-border overhead
+	visibleRows := maxRows - 1
 	if visibleRows < 3 {
 		visibleRows = 3
 	}
@@ -342,7 +389,6 @@ func (m model) renderSpellListFixed(maxRows int) string {
 		lines = append(lines, styleMuted.Render(fmt.Sprintf("  ↓ %d more", remaining)))
 	}
 
-	// Pad to fill target height
 	for len(lines) < maxRows {
 		lines = append(lines, "")
 	}
@@ -351,10 +397,9 @@ func (m model) renderSpellListFixed(maxRows int) string {
 	return m.renderPanel("Spells", w, content)
 }
 
-// renderSpellRow renders a single spell line for the list.
-func (m model) renderSpellRow(i int, e *spellEntry, sparkWidth int, maxDmg float64) string {
+func (m model) renderSpellRow(i int, e *spellEntry, nameWidth, sparkWidth int, maxDmg float64) string {
 	isCursor := i == m.cursor
-	isSel := m.selected[i]
+	isSel := m.selected[e.id]
 
 	prefix := "  "
 	if isCursor && isSel {
@@ -369,8 +414,9 @@ func (m model) renderSpellRow(i int, e *spellEntry, sparkWidth int, maxDmg float
 	if name == "" {
 		name = fmt.Sprintf("Spell %d", i+1)
 	}
-	if len(name) > 16 {
-		name = name[:13] + "..."
+	nameRunes := []rune(name)
+	if len(nameRunes) > nameWidth {
+		name = string(nameRunes[:nameWidth-3]) + "..."
 	}
 
 	nameStyle := styleValue
@@ -378,12 +424,12 @@ func (m model) renderSpellRow(i int, e *spellEntry, sparkWidth int, maxDmg float
 		nameStyle = lipgloss.NewStyle().Foreground(colorValue).Bold(true)
 	}
 
-	paddedName := fmt.Sprintf("%-16s", name)
+	paddedName := fmt.Sprintf("%-*s", nameWidth, name)
 	paddedDice := fmt.Sprintf("%6s", e.spell.Dice.String())
 
 	var spark string
 	if e.spell.Dice.Valid() && len(e.stats.MixturePDF) > 0 {
-		sparkRaw := RenderBrailleSparkline(e.stats.MixturePDF, e.stats.MixtureLo, e.stats.MixtureHi, sparkWidth)
+		sparkRaw := RenderBrailleSparkline(e.stats.MixturePDF, sparkWidth)
 		ratio := 0.0
 		if maxDmg > 0 {
 			ratio = e.stats.ExpectedDamage / maxDmg
@@ -412,7 +458,10 @@ func (m model) renderSpellRow(i int, e *spellEntry, sparkWidth int, maxDmg float
 		styleValue.Render(fmt.Sprintf("%4s", dmgStr))
 }
 
-// renderDetailContent builds the inner content for the detail pane.
+// ============================================================================
+// Detail Pane
+// ============================================================================
+
 func (m model) renderDetailContent() string {
 	entry := &m.spells[m.cursor]
 	sp := &entry.spell
@@ -444,7 +493,12 @@ func (m model) renderDetailContent() string {
 	}
 	diceInfo := styleValueBold.Render(effectiveDice.String())
 	if sp.HeightenDie > 0 {
-		diceInfo += styleMuted.Render(fmt.Sprintf(" +%dd/rank", sp.HeightenDie))
+		step := sp.effectiveHeightenStep()
+		if step > 1 {
+			diceInfo += styleMuted.Render(fmt.Sprintf(" +%dd%d/%d ranks", sp.HeightenDie, sp.Dice.Sides, step))
+		} else {
+			diceInfo += styleMuted.Render(fmt.Sprintf(" +%dd%d/rank", sp.HeightenDie, sp.Dice.Sides))
+		}
 	}
 	if sp.Type == SpellTypeSave {
 		saveMod := m.encounter.SaveModFor(sp.SaveType)
@@ -527,7 +581,7 @@ func (m model) renderDetailContent() string {
 			chartW = 16
 		}
 		chartH := 8
-		rows := RenderBrailleChart(st.MixturePDF, st.MixtureLo, st.MixtureHi, chartW, chartH, chartGradient)
+		rows := RenderBrailleChart(st.MixturePDF, chartW, chartH, chartGradient)
 		for _, row := range rows {
 			lines = append(lines, "   "+row)
 		}
@@ -562,22 +616,29 @@ func (m model) renderDetailContent() string {
 	return strings.Join(lines, "\n")
 }
 
+// ============================================================================
+// Comparison Table
+// ============================================================================
+
 func (m model) renderComparison() string {
+	contentW := m.leftContentWidth()
+
 	type ranked struct {
 		name string
 		sp   *Spell
 		st   *SpellStats
 	}
 	var items []ranked
-	for idx := range m.selected {
-		if idx < len(m.spells) {
-			e := &m.spells[idx]
-			name := e.spell.Name
-			if name == "" {
-				name = fmt.Sprintf("Spell %d", idx+1)
-			}
-			items = append(items, ranked{name: name, sp: &e.spell, st: &e.stats})
+	for i := range m.spells {
+		e := &m.spells[i]
+		if !m.selected[e.id] {
+			continue
 		}
+		name := e.spell.Name
+		if name == "" {
+			name = fmt.Sprintf("Spell %d", i+1)
+		}
+		items = append(items, ranked{name: name, sp: &e.spell, st: &e.stats})
 	}
 
 	sort.Slice(items, func(i, j int) bool {
@@ -590,21 +651,29 @@ func (m model) renderComparison() string {
 
 	bestDmg := items[0].st.ExpectedDamage
 
+	// Dynamic name width: fill remaining space after fixed columns
+	fixedCols := 8 + 12 + 8 + 4 // E[dmg] + ±1σ + Δ + prefix/gaps
+	nameWidth := contentW - fixedCols
+	if nameWidth < 12 {
+		nameWidth = 12
+	}
+
 	var lines []string
 	header := "  " +
-		styleLabel.Render(fmt.Sprintf("%-18s", "Spell")) +
+		styleLabel.Render(fmt.Sprintf("%-*s", nameWidth, "Spell")) +
 		styleLabel.Render(fmt.Sprintf("%8s", "E[dmg]")) +
 		styleLabel.Render(fmt.Sprintf("%12s", "±1σ")) +
 		styleLabel.Render(fmt.Sprintf("%8s", "Δ"))
 	lines = append(lines, header)
-	lines = append(lines, styleMuted.Render("  "+strings.Repeat("─", 46)))
+	lines = append(lines, styleMuted.Render("  "+strings.Repeat("─", contentW-4)))
 
 	for _, item := range items {
 		name := item.name
-		if len(name) > 18 {
-			name = name[:15] + "..."
+		nameRunes := []rune(name)
+		if len(nameRunes) > nameWidth {
+			name = string(nameRunes[:nameWidth-3]) + "..."
 		}
-		paddedName := fmt.Sprintf("%-18s", name)
+		paddedName := fmt.Sprintf("%-*s", nameWidth, name)
 
 		if item.sp.Dice.Valid() {
 			avg := item.st.ExpectedDamage
@@ -640,7 +709,10 @@ func (m model) renderComparison() string {
 	return m.renderPanel("Comparison", m.leftWidth(), content)
 }
 
-// renderListHelp renders a btop-style help bar with key:action pairs.
+// ============================================================================
+// Help Bar
+// ============================================================================
+
 func (m model) renderListHelp() string {
 	type binding struct {
 		key, action string
@@ -649,6 +721,7 @@ func (m model) renderListHelp() string {
 		{"j/k", "navigate"},
 		{"Space", "compare"},
 		{"a", "add"},
+		{"n", "new"},
 		{"d", "remove"},
 		{"e", "edit"},
 		{"Tab", "encounter"},
@@ -689,15 +762,15 @@ func (m model) viewEdit() string {
 	var sections []string
 
 	breadcrumb := lipgloss.NewStyle().Foreground(colorAccent).Bold(true).
-		Render("Stats Magic") +
-		styleMuted.Render(" > ") +
-		styleValueBold.Render("Edit: "+entry.spell.Name)
+		Render("Edit") +
+		styleMuted.Render(": ") +
+		styleValueBold.Render(entry.spell.Name)
 	sections = append(sections, " "+breadcrumb)
 
 	editLabels := [editFieldCount]string{
-		"Name", "Dice", "Save Type",
+		"Name", "Dice", "Defense",
 		"Mult Best", "Mult Good", "Mult Bad", "Mult Worst",
-		"Base Rank", "+Dice/Rank",
+		"Base Rank", "Heighten", "Per Ranks",
 	}
 
 	var lines []string
@@ -712,11 +785,37 @@ func (m model) viewEdit() string {
 			labelStyle = lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
 		}
 
-		lines = append(lines, indicator+labelStyle.Render(label)+" "+entry.editInputs[i].View())
-	}
+		fieldView := entry.editInputs[i].View()
 
-	lines = append(lines, "")
-	lines = append(lines, styleMuted.Render("  Save Type: Reflex, Fortitude, Will, or Attack"))
+		// Add contextual hints for special fields
+		hint := ""
+		switch i {
+		case editSaveType:
+			if focused {
+				hint = styleMuted.Render("  (Space to cycle)")
+			}
+		case editHeightenDie:
+			val := parseIntOr(entry.editInputs[editHeightenDie].Value(), 0)
+			if val > 0 {
+				dice := ParseDice(entry.editInputs[editDice].Value())
+				step := parseIntOr(entry.editInputs[editHeightenStep].Value(), 1)
+				if step < 1 {
+					step = 1
+				}
+				if dice.Valid() {
+					if step > 1 {
+						hint = styleMuted.Render(fmt.Sprintf("  +%dd%d per %d ranks", val, dice.Sides, step))
+					} else {
+						hint = styleMuted.Render(fmt.Sprintf("  +%dd%d per rank", val, dice.Sides))
+					}
+				}
+			}
+		case editHeightenStep:
+			hint = styleMuted.Render("  (1=every rank, 2=every 2 ranks)")
+		}
+
+		lines = append(lines, indicator+labelStyle.Render(label)+" "+fieldView+hint)
+	}
 
 	content := strings.Join(lines, "\n")
 	maxWidth := m.windowWidth - 4
@@ -730,7 +829,41 @@ func (m model) viewEdit() string {
 	panel := m.renderPanel("Edit", maxWidth, content)
 	sections = append(sections, panel)
 
-	help := " Tab/Shift+Tab: fields  Enter: confirm  Esc: cancel"
+	help := " Tab/Shift+Tab: fields  Space: cycle defense  Enter: confirm  Esc: cancel"
+	sections = append(sections, styleHelp.Render(help))
+
+	return lipgloss.JoinVertical(lipgloss.Left, sections...)
+}
+
+// ============================================================================
+// New Spell View
+// ============================================================================
+
+func (m model) viewNewSpell() string {
+	var sections []string
+
+	sections = append(sections, "")
+
+	var lines []string
+	lines = append(lines, styleLabel.Render("  Enter an Archives of Nethys URL to import, or a spell name for manual entry."))
+	lines = append(lines, "")
+	lines = append(lines, "  "+m.newSpellInput.View())
+	lines = append(lines, "")
+
+	content := strings.Join(lines, "\n")
+
+	maxWidth := m.windowWidth - 8
+	if maxWidth < 50 {
+		maxWidth = 50
+	}
+	if maxWidth > 80 {
+		maxWidth = 80
+	}
+
+	panel := m.renderPanel("New Spell", maxWidth, content)
+	sections = append(sections, panel)
+
+	help := " Enter: create  Esc: cancel"
 	sections = append(sections, styleHelp.Render(help))
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)

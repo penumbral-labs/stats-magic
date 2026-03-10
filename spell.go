@@ -79,7 +79,8 @@ type Spell struct {
 	Dice        DiceFormula
 	Multipliers DegreeMultipliers
 	BaseRank    int // Spell rank (1-10), 0 means unset
-	HeightenDie int // Extra dice per rank above base (0 = no heightening)
+	HeightenDie int // Extra dice per heighten step above base (0 = no heightening)
+	HeightenStep int // Ranks per heighten step (1 = every rank, 2 = every 2 ranks; 0 defaults to 1)
 }
 
 // NewSaveSpell creates a new save-based spell with default multipliers.
@@ -101,12 +102,21 @@ func NewAttackSpell(name string) Spell {
 	}
 }
 
+// effectiveHeightenStep returns the heighten step, defaulting to 1.
+func (s *Spell) effectiveHeightenStep() int {
+	if s.HeightenStep > 0 {
+		return s.HeightenStep
+	}
+	return 1
+}
+
 // EffectiveDice returns the dice formula adjusted for heightening.
-// If BaseRank is set and HeightenDie > 0, adds extra dice per rank above base.
+// If BaseRank is set and HeightenDie > 0, adds extra dice per heighten step above base.
 func (s *Spell) EffectiveDice(rank int) DiceFormula {
 	d := s.Dice
 	if s.BaseRank > 0 && s.HeightenDie > 0 && rank > s.BaseRank {
-		d.Count += (rank - s.BaseRank) * s.HeightenDie
+		steps := (rank - s.BaseRank) / s.effectiveHeightenStep()
+		d.Count += steps * s.HeightenDie
 	}
 	return d
 }

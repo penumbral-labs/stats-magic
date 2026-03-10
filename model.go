@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -11,22 +12,24 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// appMode represents the three primary interaction modes.
+// appMode represents the primary interaction modes.
 type appMode int
 
 const (
-	modeList appMode = iota // Default: spell list + detail pane
-	modeEdit               // Full edit mode (power user)
+	modeList     appMode = iota // Default: spell list + detail pane
+	modeEdit                    // Full edit mode (power user)
+	modeNewSpell                // New spell: enter name or AoN URL
 )
 
 // Encounter input field indices
 const (
-	encSpellDC = iota
+	encPCLevel = iota
+	encSpellDC
 	encAttackMod
+	encEnemyAC
 	encRefMod
 	encFortMod
 	encWillMod
-	encEnemyAC
 	encFieldCount
 )
 
@@ -43,8 +46,12 @@ const (
 	editMultWorst
 	editBaseRank
 	editHeightenDie
+	editHeightenStep
 	editFieldCount
 )
+
+// Save type options for cycling in edit mode.
+var saveTypeCycle = []string{"Reflex", "Fortitude", "Will", "Attack"}
 
 // model is the top-level Bubble Tea model.
 type model struct {
@@ -53,12 +60,17 @@ type model struct {
 	encInputs [encFieldCount]textinput.Model
 	encFocus  int // Which encounter field is focused (-1 = none)
 
-	spells   []spellEntry
-	cursor   int          // Selected spell in list
-	selected map[int]bool // Toggled for comparison
+	spells      []spellEntry
+	nextSpellID int          // Monotonic ID counter for unique spell identification
+	cursor      int          // Selected spell in list
+	selected    map[int]bool // Spell ID → selected for comparison
 
 	picker    pickerModel
 	flashText string
+	flashID   int // Prevents stale timers from clearing newer messages
+
+	// New spell mode input
+	newSpellInput textinput.Model
 
 	windowWidth  int
 	windowHeight int
@@ -67,6 +79,7 @@ type model struct {
 
 // spellEntry holds one spell and its computed stats.
 type spellEntry struct {
+	id       int // Unique identifier (never reused)
 	spell    Spell
 	stats    SpellStats
 	castRank int // Current rank for heightening (0 = use base rank)
@@ -126,22 +139,45 @@ func newInput(placeholder, value string, charLimit int) textinput.Model {
 
 func newEncounterInputs(enc EncounterState) [encFieldCount]textinput.Model {
 	var inputs [encFieldCount]textinput.Model
+	inputs[encPCLevel] = newInput("Lvl", strconv.Itoa(enc.PCLevel), 4)
 	inputs[encSpellDC] = newInput("DC", strconv.Itoa(enc.SpellDC), 4)
 	inputs[encAttackMod] = newInput("Atk", fmt.Sprintf("+%d", enc.AttackMod), 5)
+	inputs[encEnemyAC] = newInput("AC", strconv.Itoa(enc.EnemyAC), 4)
 	inputs[encRefMod] = newInput("Ref", fmt.Sprintf("+%d", enc.RefMod), 5)
 	inputs[encFortMod] = newInput("Fort", fmt.Sprintf("+%d", enc.FortMod), 5)
 	inputs[encWillMod] = newInput("Will", fmt.Sprintf("+%d", enc.WillMod), 5)
-	inputs[encEnemyAC] = newInput("AC", strconv.Itoa(enc.EnemyAC), 4)
 	return inputs
 }
 
 func (m *model) syncEncounterFromInputs() {
-	m.encounter.SpellDC = parseIntOr(m.encInputs[encSpellDC].Value(), m.encounter.SpellDC)
-	m.encounter.AttackMod = parseIntOr(m.encInputs[encAttackMod].Value(), m.encounter.AttackMod)
-	m.encounter.RefMod = parseIntOr(m.encInputs[encRefMod].Value(), m.encounter.RefMod)
-	m.encounter.FortMod = parseIntOr(m.encInputs[encFortMod].Value(), m.encounter.FortMod)
-	m.encounter.WillMod = parseIntOr(m.encInputs[encWillMod].Value(), m.encounter.WillMod)
-	m.encounter.EnemyAC = parseIntOr(m.encInputs[encEnemyAC].Value(), m.encounter.EnemyAC)
+	newLevel := parseIntOr(m.encInputs[encPCLevel].Value(), m.encounter.PCLevel)
+	if newLevel < 1 {
+		newLevel = 1
+	}
+	if newLevel > 20 {
+		newLevel = 20
+	}
+	levelChanged := newLevel != m.encounter.PCLevel
+
+	m.encounter.PCLevel = newLevel
+
+	if levelChanged {
+		m.encounter.RecalcFromLevel()
+		// Update all input values to match
+		m.encInputs[encSpellDC].SetValue(strconv.Itoa(m.encounter.SpellDC))
+		m.encInputs[encAttackMod].SetValue(fmt.Sprintf("+%d", m.encounter.AttackMod))
+		m.encInputs[encEnemyAC].SetValue(strconv.Itoa(m.encounter.EnemyAC))
+		m.encInputs[encRefMod].SetValue(fmt.Sprintf("+%d", m.encounter.RefMod))
+		m.encInputs[encFortMod].SetValue(fmt.Sprintf("+%d", m.encounter.FortMod))
+		m.encInputs[encWillMod].SetValue(fmt.Sprintf("+%d", m.encounter.WillMod))
+	} else {
+		m.encounter.SpellDC = parseIntOr(m.encInputs[encSpellDC].Value(), m.encounter.SpellDC)
+		m.encounter.AttackMod = parseIntOr(m.encInputs[encAttackMod].Value(), m.encounter.AttackMod)
+		m.encounter.EnemyAC = parseIntOr(m.encInputs[encEnemyAC].Value(), m.encounter.EnemyAC)
+		m.encounter.RefMod = parseIntOr(m.encInputs[encRefMod].Value(), m.encounter.RefMod)
+		m.encounter.FortMod = parseIntOr(m.encInputs[encFortMod].Value(), m.encounter.FortMod)
+		m.encounter.WillMod = parseIntOr(m.encInputs[encWillMod].Value(), m.encounter.WillMod)
+	}
 }
 
 func (m *model) recalcAll() {
@@ -167,6 +203,44 @@ func (m *model) blurEncFields() {
 	m.encFocus = -1
 }
 
+// cycleSaveProfile cycles the save profile for the currently focused encounter field.
+// Returns true if a profile was cycled.
+func (m *model) cycleSaveProfile() bool {
+	switch m.encFocus {
+	case encRefMod:
+		m.encounter.RefProfile = m.encounter.RefProfile.Next()
+		m.encounter.RefMod = MonsterSave(m.encounter.PCLevel, m.encounter.RefProfile)
+		m.encInputs[encRefMod].SetValue(fmt.Sprintf("+%d", m.encounter.RefMod))
+	case encFortMod:
+		m.encounter.FortProfile = m.encounter.FortProfile.Next()
+		m.encounter.FortMod = MonsterSave(m.encounter.PCLevel, m.encounter.FortProfile)
+		m.encInputs[encFortMod].SetValue(fmt.Sprintf("+%d", m.encounter.FortMod))
+	case encWillMod:
+		m.encounter.WillProfile = m.encounter.WillProfile.Next()
+		m.encounter.WillMod = MonsterSave(m.encounter.PCLevel, m.encounter.WillProfile)
+		m.encInputs[encWillMod].SetValue(fmt.Sprintf("+%d", m.encounter.WillMod))
+	default:
+		return false
+	}
+	return true
+}
+
+// addSpellEntry creates a new spell entry with a unique ID and adds it to the model.
+func (m *model) addSpellEntry(sp Spell) {
+	m.nextSpellID++
+	entry := spellEntry{id: m.nextSpellID, spell: sp}
+	entry.recalc(m.encounter)
+	m.spells = append(m.spells, entry)
+	m.cursor = len(m.spells) - 1
+}
+
+// flash sets a flash message with a unique ID to prevent stale timer collisions.
+func (m *model) flash(text string) tea.Cmd {
+	m.flashID++
+	m.flashText = text
+	return flashAfter(3*time.Second, m.flashID)
+}
+
 // initEditInputs populates edit mode text inputs from the spell.
 func (e *spellEntry) initEditInputs() {
 	sp := e.spell
@@ -175,7 +249,7 @@ func (e *spellEntry) initEditInputs() {
 
 	saveTypeVal := sp.SaveType
 	if sp.Type == SpellTypeAttack {
-		saveTypeVal = "attack"
+		saveTypeVal = "Attack"
 	}
 	e.editInputs[editSaveType] = newInput("Save", saveTypeVal, 12)
 
@@ -194,10 +268,45 @@ func (e *spellEntry) initEditInputs() {
 	if sp.HeightenDie > 0 {
 		hdStr = strconv.Itoa(sp.HeightenDie)
 	}
-	e.editInputs[editHeightenDie] = newInput("+dice/rank", hdStr, 4)
+	e.editInputs[editHeightenDie] = newInput("+dice", hdStr, 4)
+
+	hsStr := ""
+	if sp.HeightenStep > 1 {
+		hsStr = strconv.Itoa(sp.HeightenStep)
+	}
+	e.editInputs[editHeightenStep] = newInput("step", hsStr, 4)
 
 	e.editFocus = editName
 	e.editInputs[editName].Focus()
+}
+
+// cycleSaveType cycles the save type input through Reflex → Fortitude → Will → Attack.
+func (e *spellEntry) cycleSaveType() {
+	current := e.editInputs[editSaveType].Value()
+	idx := 0
+	for i, opt := range saveTypeCycle {
+		if strings.EqualFold(opt, current) {
+			idx = i
+			break
+		}
+	}
+	next := (idx + 1) % len(saveTypeCycle)
+	e.editInputs[editSaveType].SetValue(saveTypeCycle[next])
+
+	// Update multipliers when switching between save/attack
+	newType := saveTypeCycle[next]
+	if newType == "Attack" {
+		e.editInputs[editMultBest].SetValue("2.0")
+		e.editInputs[editMultGood].SetValue("1.0")
+		e.editInputs[editMultBad].SetValue("0.0")
+		e.editInputs[editMultWorst].SetValue("0.0")
+	} else if strings.EqualFold(current, "Attack") {
+		// Switching FROM attack TO save — set save defaults
+		e.editInputs[editMultBest].SetValue("2.0")
+		e.editInputs[editMultGood].SetValue("1.0")
+		e.editInputs[editMultBad].SetValue("0.5")
+		e.editInputs[editMultWorst].SetValue("0.0")
+	}
 }
 
 // syncSpellFromEditInputs reads edit inputs back into the spell.
@@ -210,10 +319,6 @@ func (e *spellEntry) syncSpellFromEditInputs() {
 	case "attack", "atk", "":
 		e.spell.Type = SpellTypeAttack
 		e.spell.SaveType = ""
-		// Set attack multipliers if they look like save defaults
-		if e.spell.Multipliers.Bad == 0.5 {
-			e.spell.Multipliers = DefaultAttackMultipliers()
-		}
 	default:
 		e.spell.Type = SpellTypeSave
 		switch {
@@ -233,6 +338,28 @@ func (e *spellEntry) syncSpellFromEditInputs() {
 
 	e.spell.BaseRank = parseIntOr(e.editInputs[editBaseRank].Value(), 0)
 	e.spell.HeightenDie = parseIntOr(e.editInputs[editHeightenDie].Value(), 0)
+	e.spell.HeightenStep = parseIntOr(e.editInputs[editHeightenStep].Value(), 0)
+}
+
+// isAoNURL returns true if the input is a valid Archives of Nethys URL.
+func isAoNURL(input string) bool {
+	u, err := url.Parse(input)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return u.Scheme == "https" &&
+		(host == "2e.aonprd.com" || host == "aonprd.com")
+}
+
+// --- AoN Import Messages ---
+
+type aonSpellMsg struct {
+	spell Spell
+}
+
+type aonErrorMsg struct {
+	err error
 }
 
 // --- Bubble Tea Interface ---
@@ -254,15 +381,18 @@ func initialModel() model {
 	switch {
 	case err != nil && !os.IsNotExist(err):
 		m.flashText = fmt.Sprintf("Load failed: %v", err)
+		m.flashID++
 	case len(savedSpells) > 0:
 		m.encounter = savedEnc
 		m.encInputs = newEncounterInputs(savedEnc)
 		for _, sp := range savedSpells {
-			entry := spellEntry{spell: sp}
+			m.nextSpellID++
+			entry := spellEntry{id: m.nextSpellID, spell: sp}
 			entry.recalc(m.encounter)
 			m.spells = append(m.spells, entry)
 		}
 		m.flashText = fmt.Sprintf("Loaded %d spell(s)", len(m.spells))
+		m.flashID++
 	}
 
 	m.picker = newPickerModel(m.windowWidth, m.windowHeight)
@@ -272,29 +402,38 @@ func initialModel() model {
 func (m model) Init() tea.Cmd {
 	cmds := []tea.Cmd{textinput.Blink}
 	if m.flashText != "" {
-		cmds = append(cmds, flashAfter(3*time.Second))
+		cmds = append(cmds, flashAfter(3*time.Second, m.flashID))
 	}
 	return tea.Batch(cmds...)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Handle messages that can arrive after picker closes
+	// Handle messages that can arrive in any mode
 	switch msg := msg.(type) {
 	case clearFlashMsg:
-		m.flashText = ""
+		if msg.id == m.flashID {
+			m.flashText = ""
+		}
 		return m, nil
 
 	case pickerMsg:
 		sp := msg.preset.ToSpell()
-		entry := spellEntry{spell: sp}
-		entry.recalc(m.encounter)
-		m.spells = append(m.spells, entry)
-		m.cursor = len(m.spells) - 1
-		m.flashText = fmt.Sprintf("Added: %s", msg.preset.Name)
-		return m, flashAfter(3 * time.Second)
+		m.addSpellEntry(sp)
+		return m, m.flash(fmt.Sprintf("Added: %s", msg.preset.Name))
 
 	case pickerCancelMsg:
 		return m, nil
+
+	case aonSpellMsg:
+		m.addSpellEntry(msg.spell)
+		m.spells[m.cursor].initEditInputs()
+		m.mode = modeEdit
+		return m, m.flash(fmt.Sprintf("Imported: %s", msg.spell.Name))
+
+	case aonErrorMsg:
+		m.flashID++
+		m.flashText = fmt.Sprintf("Import failed: %v", msg.err)
+		return m, flashAfter(5*time.Second, m.flashID)
 	}
 
 	// Handle picker overlay
@@ -307,6 +446,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateList(msg)
 	case modeEdit:
 		return m.updateEdit(msg)
+	case modeNewSpell:
+		return m.updateNewSpell(msg)
 	}
 
 	return m, nil
@@ -333,11 +474,7 @@ func (m model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
-		case "ctrl+c":
-			m.quitting = true
-			return m, tea.Quit
-
-		case "q":
+		case "ctrl+c", "q":
 			m.quitting = true
 			return m, tea.Quit
 
@@ -392,10 +529,11 @@ func (m model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case " ":
 			if len(m.spells) > 0 {
-				if m.selected[m.cursor] {
-					delete(m.selected, m.cursor)
+				id := m.spells[m.cursor].id
+				if m.selected[id] {
+					delete(m.selected, id)
 				} else {
-					m.selected[m.cursor] = true
+					m.selected[id] = true
 				}
 			}
 			return m, nil
@@ -406,31 +544,14 @@ func (m model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case "n":
-			sp := NewSaveSpell(fmt.Sprintf("Spell %d", len(m.spells)+1))
-			entry := spellEntry{spell: sp}
-			entry.recalc(m.encounter)
-			entry.initEditInputs()
-			m.spells = append(m.spells, entry)
-			m.cursor = len(m.spells) - 1
-			m.mode = modeEdit
-			m.blurEncFields()
+			m.newSpellInput = newInput("AoN URL or spell name", "", 60)
+			m.newSpellInput.Focus()
+			m.mode = modeNewSpell
 			return m, nil
 
 		case "d":
 			if len(m.spells) > 0 {
-				// Clear selection references for deleted spell
-				delete(m.selected, m.cursor)
-				// Rebuild selected map with shifted indices
-				newSel := make(map[int]bool)
-				for k := range m.selected {
-					if k > m.cursor {
-						newSel[k-1] = true
-					} else {
-						newSel[k] = true
-					}
-				}
-				m.selected = newSel
-
+				delete(m.selected, m.spells[m.cursor].id)
 				m.spells = append(m.spells[:m.cursor], m.spells[m.cursor+1:]...)
 				if m.cursor >= len(m.spells) && m.cursor > 0 {
 					m.cursor = len(m.spells) - 1
@@ -444,11 +565,9 @@ func (m model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "ctrl+s":
 			if err := saveData(m.encounter, m.spells); err != nil {
-				m.flashText = fmt.Sprintf("Save failed: %v", err)
-			} else {
-				m.flashText = fmt.Sprintf("Saved %d spell(s)!", len(m.spells))
+				return m, m.flash(fmt.Sprintf("Save failed: %v", err))
 			}
-			return m, flashAfter(3 * time.Second)
+			return m, m.flash(fmt.Sprintf("Saved %d spell(s)!", len(m.spells)))
 		}
 	}
 
@@ -485,6 +604,13 @@ func (m model) updateEncounterInput(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
+
+		case " ":
+			// Space cycles save profiles on save fields
+			if m.cycleSaveProfile() {
+				m.recalcAll()
+				return m, nil
+			}
 		}
 
 		// Forward to active input
@@ -495,7 +621,10 @@ func (m model) updateEncounterInput(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	return m, nil
+	// Forward non-key messages (e.g., blink) to the active input
+	var cmd tea.Cmd
+	m.encInputs[m.encFocus], cmd = m.encInputs[m.encFocus].Update(msg)
+	return m, cmd
 }
 
 func (m model) updateEdit(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -515,12 +644,10 @@ func (m model) updateEdit(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "esc":
-			// Cancel, revert to detail
 			m.mode = modeList
 			return m, nil
 
 		case "enter":
-			// Confirm changes
 			entry.syncSpellFromEditInputs()
 			entry.recalc(m.encounter)
 			m.mode = modeList
@@ -544,6 +671,13 @@ func (m model) updateEdit(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
+
+		case " ":
+			// Space cycles save type when on that field
+			if entry.editFocus == editSaveType {
+				entry.cycleSaveType()
+				return m, nil
+			}
 		}
 
 		// Forward to active edit input
@@ -552,7 +686,61 @@ func (m model) updateEdit(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	return m, nil
+	// Forward non-key messages (e.g., blink) to the active input
+	var cmd tea.Cmd
+	entry.editInputs[entry.editFocus], cmd = entry.editInputs[entry.editFocus].Update(msg)
+	return m, cmd
+}
+
+func (m model) updateNewSpell(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.windowWidth = msg.Width
+		m.windowHeight = msg.Height
+		return m, nil
+
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "esc":
+			m.mode = modeList
+			return m, nil
+
+		case "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
+
+		case "enter":
+			input := strings.TrimSpace(m.newSpellInput.Value())
+			m.mode = modeList
+
+			if isAoNURL(input) {
+				// AoN URL — fetch asynchronously
+				return m, fetchAoNSpell(input)
+			}
+
+			// Create new spell with the given name (or default)
+			name := input
+			if name == "" {
+				name = fmt.Sprintf("Spell %d", len(m.spells)+1)
+			}
+			sp := NewSaveSpell(name)
+			m.addSpellEntry(sp)
+			m.spells[m.cursor].initEditInputs()
+			m.mode = modeEdit
+			m.blurEncFields()
+			return m, nil
+		}
+
+		// Forward to input
+		var cmd tea.Cmd
+		m.newSpellInput, cmd = m.newSpellInput.Update(msg)
+		return m, cmd
+	}
+
+	// Forward non-key messages (e.g., blink)
+	var cmd tea.Cmd
+	m.newSpellInput, cmd = m.newSpellInput.Update(msg)
+	return m, cmd
 }
 
 func (m model) View() string {
@@ -570,6 +758,8 @@ func (m model) View() string {
 		return m.viewList()
 	case modeEdit:
 		return m.viewEdit()
+	case modeNewSpell:
+		return m.viewNewSpell()
 	}
 
 	return ""

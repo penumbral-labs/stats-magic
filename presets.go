@@ -14,8 +14,9 @@ type SpellPreset struct {
 	Type        SpellType
 	SaveType    string // "Reflex", "Fortitude", "Will", or "" for attacks
 	Multipliers DegreeMultipliers
-	HeightenDie int // Extra dice per rank above base (0 = none)
-	Description string
+	HeightenDie  int // Extra dice per heighten step above base (0 = none)
+	HeightenStep int // Ranks per heighten step (0 or 1 = every rank, 2 = every 2 ranks)
+	Description  string
 }
 
 // AllPresets returns the full library of PF2e Remaster spell presets.
@@ -25,14 +26,15 @@ func AllPresets() []SpellPreset {
 		// Cantrips (base rank 1, scale with character level)
 		// =====================================================================
 		{
-			Name:        "Caustic Blast",
-			Rank:        1,
-			Dice:        "1d8",
-			Type:        SpellTypeSave,
-			SaveType:    "Reflex",
-			Multipliers: DefaultSaveMultipliers(),
-			HeightenDie: 0, // +1d8 per 2 ranks (not per rank)
-			Description: "5-ft burst, 30 ft, basic Reflex, acid",
+			Name:         "Caustic Blast",
+			Rank:         1,
+			Dice:         "1d8",
+			Type:         SpellTypeSave,
+			SaveType:     "Reflex",
+			Multipliers:  DefaultSaveMultipliers(),
+			HeightenDie:  1,
+			HeightenStep: 2, // +1d8 per 2 ranks
+			Description:  "5-ft burst, 30 ft, basic Reflex, acid",
 		},
 		{
 			Name:        "Divine Lance",
@@ -208,14 +210,15 @@ func AllPresets() []SpellPreset {
 			Description: "Spell attack, fire; 1 ray per action (up to 3)",
 		},
 		{
-			Name:        "Ice Storm",
-			Rank:        2,
-			Dice:        "2d8",
-			Type:        SpellTypeSave,
-			SaveType:    "Reflex",
-			Multipliers: DefaultSaveMultipliers(),
-			HeightenDie: 0, // +1d8 per 2 ranks, not per rank
-			Description: "20-ft burst, basic Reflex, bludgeoning+cold; sustained",
+			Name:         "Ice Storm",
+			Rank:         2,
+			Dice:         "2d8",
+			Type:         SpellTypeSave,
+			SaveType:     "Reflex",
+			Multipliers:  DefaultSaveMultipliers(),
+			HeightenDie:  1,
+			HeightenStep: 2, // +1d8 per 2 ranks
+			Description:  "20-ft burst, basic Reflex, bludgeoning+cold; sustained",
 		},
 		{
 			Name:        "Noise Blast",
@@ -488,13 +491,14 @@ func (p SpellPreset) PresetFilterString() string {
 // Encounter-specific values (DC, save mods, AC) live in EncounterState.
 func (p SpellPreset) ToSpell() Spell {
 	return Spell{
-		Name:        p.Name,
-		Type:        p.Type,
-		SaveType:    p.SaveType,
-		Dice:        ParseDice(p.Dice),
-		Multipliers: p.Multipliers,
-		BaseRank:    p.Rank,
-		HeightenDie: p.HeightenDie,
+		Name:         p.Name,
+		Type:         p.Type,
+		SaveType:     p.SaveType,
+		Dice:         ParseDice(p.Dice),
+		Multipliers:  p.Multipliers,
+		BaseRank:     p.Rank,
+		HeightenDie:  p.HeightenDie,
+		HeightenStep: p.HeightenStep,
 	}
 }
 
@@ -507,7 +511,11 @@ func (p SpellPreset) PickerLabel() string {
 		parts = append(parts, "attack roll")
 	}
 	if p.HeightenDie > 0 {
-		parts = append(parts, fmt.Sprintf("+%dd/rank", p.HeightenDie))
+		if p.HeightenStep > 1 {
+			parts = append(parts, fmt.Sprintf("+%dd/%d ranks", p.HeightenDie, p.HeightenStep))
+		} else {
+			parts = append(parts, fmt.Sprintf("+%dd/rank", p.HeightenDie))
+		}
 	}
 	return strings.Join(parts, " | ")
 }
