@@ -1,0 +1,134 @@
+package main
+
+import (
+	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
+)
+
+// SpellType distinguishes save-based spells from attack-based spells.
+type SpellType int
+
+const (
+	SpellTypeSave SpellType = iota
+	SpellTypeAttack
+)
+
+func (st SpellType) String() string {
+	if st == SpellTypeSave {
+		return "Save-based"
+	}
+	return "Attack-based"
+}
+
+// DiceFormula represents a parsed NdS+B dice expression.
+type DiceFormula struct {
+	Count int // N - number of dice
+	Sides int // S - sides per die
+	Bonus int // B - flat modifier
+}
+
+// String returns the canonical dice notation.
+func (d DiceFormula) String() string {
+	s := fmt.Sprintf("%dd%d", d.Count, d.Sides)
+	if d.Bonus > 0 {
+		s += fmt.Sprintf("+%d", d.Bonus)
+	} else if d.Bonus < 0 {
+		s += fmt.Sprintf("%d", d.Bonus)
+	}
+	return s
+}
+
+// Valid returns true if the formula has at least one die with at least two sides.
+func (d DiceFormula) Valid() bool {
+	return d.Count > 0 && d.Sides >= 2
+}
+
+var diceRegex = regexp.MustCompile(`^(\d+)d(\d+)(?:([+-])(\d+))?$`)
+
+// ParseDice parses a dice notation string like "8d6", "4d10+4", or "2d8-1".
+// Returns a zero DiceFormula if the input is invalid.
+func ParseDice(s string) DiceFormula {
+	s = strings.TrimSpace(s)
+	s = strings.ReplaceAll(s, " ", "")
+	m := diceRegex.FindStringSubmatch(s)
+	if m == nil {
+		return DiceFormula{}
+	}
+
+	count, _ := strconv.Atoi(m[1])
+	sides, _ := strconv.Atoi(m[2])
+	bonus := 0
+	if m[4] != "" {
+		bonus, _ = strconv.Atoi(m[4])
+		if m[3] == "-" {
+			bonus = -bonus
+		}
+	}
+
+	return DiceFormula{Count: count, Sides: sides, Bonus: bonus}
+}
+
+// Spell holds the intrinsic properties of a spell. Encounter-specific values
+// (DC, save mods, AC) live in EncounterState instead.
+type Spell struct {
+	Name        string
+	Type        SpellType
+	SaveType    string // "Reflex", "Fortitude", "Will", "" for attacks
+	Dice        DiceFormula
+	Multipliers DegreeMultipliers
+	BaseRank    int // Spell rank (1-10), 0 means unset
+	HeightenDie int // Extra dice per rank above base (0 = no heightening)
+}
+
+// NewSaveSpell creates a new save-based spell with default multipliers.
+func NewSaveSpell(name string) Spell {
+	return Spell{
+		Name:        name,
+		Type:        SpellTypeSave,
+		SaveType:    "Reflex",
+		Multipliers: DefaultSaveMultipliers(),
+	}
+}
+
+// NewAttackSpell creates a new attack-based spell with default multipliers.
+func NewAttackSpell(name string) Spell {
+	return Spell{
+		Name:        name,
+		Type:        SpellTypeAttack,
+		Multipliers: DefaultAttackMultipliers(),
+	}
+}
+
+// EffectiveDice returns the dice formula adjusted for heightening.
+// If BaseRank is set and HeightenDie > 0, adds extra dice per rank above base.
+func (s *Spell) EffectiveDice(rank int) DiceFormula {
+	d := s.Dice
+	if s.BaseRank > 0 && s.HeightenDie > 0 && rank > s.BaseRank {
+		d.Count += (rank - s.BaseRank) * s.HeightenDie
+	}
+	return d
+}
+
+// DefenseLabel returns a short description of what defense this spell targets.
+func (s *Spell) DefenseLabel() string {
+	if s.Type == SpellTypeAttack {
+		return "Attack"
+	}
+	if s.SaveType != "" {
+		return s.SaveType[:3] + " save"
+	}
+	return "Ref save"
+}
+
+// ShortDefenseLabel returns a compact defense label for tight layouts.
+func (s *Spell) ShortDefenseLabel() string {
+	if s.Type == SpellTypeAttack {
+		return "Atk"
+	}
+	if s.SaveType != "" {
+		return s.SaveType[:3]
+	}
+	return "Ref"
+}
