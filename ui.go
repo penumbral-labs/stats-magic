@@ -86,7 +86,7 @@ var barGradient = []lipgloss.Color{
 // Save profile colors (from caster's perspective: low save = easy = green)
 var profileColors = [3]lipgloss.Color{
 	lipgloss.Color("#53d769"), // Low save → easy for caster
-	lipgloss.Color("#888899"), // Mod → neutral
+	lipgloss.Color("#888899"), // Med → neutral
 	lipgloss.Color("#e94560"), // High save → hard for caster
 }
 
@@ -731,7 +731,7 @@ func (m model) renderListHelp() string {
 			{"Esc", "done"},
 		}
 		if m.encFocus == encRefMod || m.encFocus == encFortMod || m.encFocus == encWillMod {
-			bindings = append(bindings, binding{"Space", "cycle Low/Mod/High"})
+			bindings = append(bindings, binding{"Space", "cycle Low/Med/High"})
 		}
 		bindings = append(bindings, binding{"^S", "save"}, binding{"^C", "quit"})
 	} else {

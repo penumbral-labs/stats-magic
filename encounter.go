@@ -5,7 +5,7 @@ type SaveProfile int
 
 const (
 	SaveLow SaveProfile = iota
-	SaveMod
+	SaveMed
 	SaveHigh
 )
 
@@ -16,7 +16,7 @@ func (p SaveProfile) String() string {
 	case SaveHigh:
 		return "High"
 	default:
-		return "Mod"
+		return "Med"
 	}
 }
 
@@ -33,7 +33,7 @@ func ParseSaveProfile(s string) SaveProfile {
 	case "High":
 		return SaveHigh
 	default:
-		return SaveMod
+		return SaveMed
 	}
 }
 
@@ -62,9 +62,9 @@ func DefaultEncounter() EncounterState {
 func EncounterForLevel(level int) EncounterState {
 	enc := EncounterState{
 		PCLevel:     level,
-		RefProfile:  SaveMod,
-		FortProfile: SaveMod,
-		WillProfile: SaveMod,
+		RefProfile:  SaveMed,
+		FortProfile: SaveMed,
+		WillProfile: SaveMed,
 	}
 	enc.RecalcFromLevel()
 	return enc
@@ -131,8 +131,8 @@ func PCAttackMod(level int) int {
 // monsterACTable: moderate AC by creature level (GM Core Table 2-5).
 var monsterACTable = [21]int{
 	0,
-	16, 18, 19, 21, 22, 24, 25, 27, 28, 30,
-	31, 33, 34, 36, 37, 39, 40, 42, 43, 45,
+	15, 17, 18, 20, 21, 23, 24, 26, 27, 29,
+	30, 32, 33, 35, 36, 38, 39, 41, 42, 44,
 }
 
 // MonsterAC returns the moderate AC for a creature at the given level.
