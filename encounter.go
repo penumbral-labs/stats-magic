@@ -105,11 +105,11 @@ func (e EncounterState) SaveModFor(saveType string) int {
 var pcSpellDCTable = [21]int{
 	0,              // level 0 (unused)
 	17, 18, 19, 20, // levels 1-4:  trained +2, ability +4
-	22, 23,         // levels 5-6:  trained +2, ability +5
-	26, 27, 28,     // levels 7-9:  expert +4, ability +5
+	22, 23, // levels 5-6:  trained +2, ability +5
+	26, 27, 28, // levels 7-9:  expert +4, ability +5
 	30, 31, 32, 33, 34, // levels 10-14: expert +4, ability +6
 	38, 39, 40, 41, // levels 15-18: master +6, ability +7
-	44, 46,         // levels 19-20: legendary +8, ability +7/+8
+	44, 46, // levels 19-20: legendary +8, ability +7/+8
 }
 
 // PCSpellDC returns the expected spell DC for a primary caster at the given level.
@@ -149,27 +149,27 @@ func MonsterAC(level int) int {
 // monsterSaveTable: save modifiers by creature level, indexed [level][profile].
 // Values from GM Core Table 2-6 (Saving Throws) for Low, Moderate, High.
 var monsterSaveTable = [21][3]int{
-	{0, 0, 0},       // level 0 (unused)
-	{4, 7, 10},      // level 1
-	{5, 8, 11},      // level 2
-	{6, 9, 12},      // level 3
-	{8, 11, 14},     // level 4
-	{9, 12, 15},     // level 5
-	{11, 14, 17},    // level 6
-	{12, 15, 18},    // level 7
-	{13, 16, 19},    // level 8
-	{15, 18, 21},    // level 9
-	{16, 19, 22},    // level 10
-	{18, 21, 24},    // level 11
-	{19, 22, 25},    // level 12
-	{20, 23, 26},    // level 13
-	{22, 25, 28},    // level 14
-	{23, 26, 29},    // level 15
-	{25, 28, 30},    // level 16
-	{26, 29, 32},    // level 17
-	{27, 30, 33},    // level 18
-	{29, 32, 35},    // level 19
-	{30, 33, 36},    // level 20
+	{0, 0, 0},    // level 0 (unused)
+	{4, 7, 10},   // level 1
+	{5, 8, 11},   // level 2
+	{6, 9, 12},   // level 3
+	{8, 11, 14},  // level 4
+	{9, 12, 15},  // level 5
+	{11, 14, 17}, // level 6
+	{12, 15, 18}, // level 7
+	{13, 16, 19}, // level 8
+	{15, 18, 21}, // level 9
+	{16, 19, 22}, // level 10
+	{18, 21, 24}, // level 11
+	{19, 22, 25}, // level 12
+	{20, 23, 26}, // level 13
+	{22, 25, 28}, // level 14
+	{23, 26, 29}, // level 15
+	{25, 28, 30}, // level 16
+	{26, 29, 32}, // level 17
+	{27, 30, 33}, // level 18
+	{29, 32, 35}, // level 19
+	{30, 33, 36}, // level 20
 }
 
 // MonsterSave returns the save modifier for a creature at the given level and profile.

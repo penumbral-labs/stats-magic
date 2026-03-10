@@ -13,14 +13,14 @@ import (
 
 var (
 	colorBorder   = lipgloss.Color("#555566") // dim border
-	colorTitle    = lipgloss.Color("#e94560")  // panel titles
-	colorLabel    = lipgloss.Color("#888899")  // secondary text
-	colorValue    = lipgloss.Color("#eaeaea")  // primary data
-	colorAccent   = lipgloss.Color("#e94560")  // highlights, cursor
-	colorMuted    = lipgloss.Color("#666677")  // de-emphasized
-	colorGood     = lipgloss.Color("#53d769")  // positive signals
-	colorSelected = lipgloss.Color("#ffc107")  // selection marker
-	colorTrack    = lipgloss.Color("#333344")  // unfilled bar track
+	colorTitle    = lipgloss.Color("#e94560") // panel titles
+	colorLabel    = lipgloss.Color("#888899") // secondary text
+	colorValue    = lipgloss.Color("#eaeaea") // primary data
+	colorAccent   = lipgloss.Color("#e94560") // highlights, cursor
+	colorMuted    = lipgloss.Color("#666677") // de-emphasized
+	colorGood     = lipgloss.Color("#53d769") // positive signals
+	colorSelected = lipgloss.Color("#ffc107") // selection marker
+	colorTrack    = lipgloss.Color("#333344") // unfilled bar track
 )
 
 // --- Styles ---
