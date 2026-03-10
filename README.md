@@ -2,7 +2,9 @@
 
 Terminal UI for calculating and comparing PF2e spell damage distributions.
 
-Model encounter parameters (DC, saves, AC), browse a library of ~40 Remaster spells, compare expected damage across degrees of success, and visualize probability distributions with braille charts.
+Model encounter parameters (DC, saves, AC), browse a library of ~40 Remaster spells,
+compare expected damage across degrees of success, and visualize probability
+distributions with braille charts.
 
 ## Features
 
@@ -16,6 +18,17 @@ Model encounter parameters (DC, saves, AC), browse a library of ~40 Remaster spe
 - Spell preset picker with fuzzy search
 
 ## Install
+
+Download a prebuilt binary from the [latest release](https://github.com/penumbral-labs/stats-magic/releases/latest):
+
+```bash
+# Linux (amd64)
+curl -Lo stats-magic https://github.com/penumbral-labs/stats-magic/releases/latest/download/stats-magic-linux-amd64
+chmod +x stats-magic
+./stats-magic
+```
+
+Or install with Go:
 
 ```bash
 go install github.com/penumbral-labs/stats-magic@latest
@@ -31,7 +44,7 @@ go build -o stats-magic .
 ## Usage
 
 | Key | Action |
-|-----|--------|
+| --- | --- |
 | `j/k` | Navigate spell list |
 | `Space` | Toggle spell for comparison |
 | `a` | Add spell from preset library |

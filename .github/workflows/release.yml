@@ -44,6 +44,10 @@ jobs:
           if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
           go build -ldflags="-s -w" -o "stats-magic-${GOOS}-${GOARCH}${ext}" .
 
+      - name: Mark executable
+        if: matrix.goos != 'windows'
+        run: chmod +x stats-magic-${{ matrix.goos }}-${{ matrix.goarch }}
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
