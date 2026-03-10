@@ -233,7 +233,7 @@ func (m model) viewList() string {
 		rightCol := lipgloss.NewStyle().MarginLeft(1).Render(detailPanel)
 		body = lipgloss.JoinHorizontal(lipgloss.Top, leftCol, rightCol)
 	} else {
-		spellListRows := bodyH - encHeight
+		spellListRows := bodyH - encHeight - 2 // -2 for spell panel border chrome
 		if spellListRows < 5 {
 			spellListRows = 5
 		}
