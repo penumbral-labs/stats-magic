@@ -284,7 +284,11 @@ func (m model) renderEncounterPanel() string {
 			indicator = lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Render("> ")
 			labelStyle = lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
 		}
-		return indicator + labelStyle.Render(paddedLabel) + profLabel + " " + m.encInputs[idx].View()
+		hint := ""
+		if focused {
+			hint = styleMuted.Render(" ␣:cycle")
+		}
+		return indicator + labelStyle.Render(paddedLabel) + profLabel + " " + m.encInputs[idx].View() + hint
 	}
 
 	// You column
@@ -717,24 +721,39 @@ func (m model) renderListHelp() string {
 	type binding struct {
 		key, action string
 	}
-	bindings := []binding{
-		{"j/k", "navigate"},
-		{"Space", "compare"},
-		{"a", "add"},
-		{"n", "new"},
-		{"d", "remove"},
-		{"e", "edit"},
-		{"Tab", "encounter"},
-	}
 
-	if len(m.spells) > 0 {
-		entry := &m.spells[m.cursor]
-		if entry.spell.BaseRank > 0 && entry.spell.HeightenDie > 0 {
-			bindings = append(bindings, binding{"+/-", "rank"})
+	var bindings []binding
+
+	if m.encFocus >= 0 {
+		// Encounter input mode
+		bindings = []binding{
+			{"Tab", "next field"},
+			{"Esc", "done"},
 		}
-	}
+		if m.encFocus == encRefMod || m.encFocus == encFortMod || m.encFocus == encWillMod {
+			bindings = append(bindings, binding{"Space", "cycle Low/Mod/High"})
+		}
+		bindings = append(bindings, binding{"^S", "save"}, binding{"^C", "quit"})
+	} else {
+		bindings = []binding{
+			{"j/k", "navigate"},
+			{"Space", "compare"},
+			{"a", "add"},
+			{"n", "new"},
+			{"d", "remove"},
+			{"e", "edit"},
+			{"Tab", "encounter"},
+		}
 
-	bindings = append(bindings, binding{"^S", "save"}, binding{"q", "quit"})
+		if len(m.spells) > 0 {
+			entry := &m.spells[m.cursor]
+			if entry.spell.BaseRank > 0 && entry.spell.HeightenDie > 0 {
+				bindings = append(bindings, binding{"+/-", "rank"})
+			}
+		}
+
+		bindings = append(bindings, binding{"^S", "save"}, binding{"q", "quit"})
+	}
 
 	keyStyle := lipgloss.NewStyle().Foreground(colorValue)
 	actionStyle := lipgloss.NewStyle().Foreground(colorMuted)
