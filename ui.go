@@ -242,6 +242,8 @@ func (m model) viewList() string {
 	}
 
 	// Ensure total output fits exactly in the window (ANSI-safe via lipgloss).
+	body = lipgloss.NewStyle().MaxWidth(m.windowWidth).Render(body)
+
 	bodyHeight := lipgloss.Height(body)
 	if bodyHeight < bodyH {
 		body += strings.Repeat("\n", bodyH-bodyHeight)

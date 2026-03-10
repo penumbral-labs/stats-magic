@@ -4,12 +4,12 @@
 
 Output demo.gif
 
-Set FontSize 14
-Set Width 1200
-Set Height 700
+Set FontSize 13
+Set Width 1400
+Set Height 900
 Set FontFamily "JetBrains Mono"
 Set Theme "Catppuccin Mocha"
-Set Padding 20
+Set Padding 10
 Set Framerate 24
 Set TypingSpeed 75ms
 
