@@ -116,10 +116,7 @@ func (s *Spell) DefenseLabel() string {
 	if s.Type == SpellTypeAttack {
 		return "Attack"
 	}
-	if s.SaveType != "" {
-		return s.SaveType[:3] + " save"
-	}
-	return "Ref save"
+	return saveAbbrev(s.SaveType) + " save"
 }
 
 // ShortDefenseLabel returns a compact defense label for tight layouts.
@@ -127,8 +124,16 @@ func (s *Spell) ShortDefenseLabel() string {
 	if s.Type == SpellTypeAttack {
 		return "Atk"
 	}
-	if s.SaveType != "" {
-		return s.SaveType[:3]
+	return saveAbbrev(s.SaveType)
+}
+
+// saveAbbrev returns a 3-letter abbreviation for a save type.
+func saveAbbrev(saveType string) string {
+	if len(saveType) >= 3 {
+		return saveType[:3]
 	}
-	return "Ref"
+	if saveType == "" {
+		return "Ref"
+	}
+	return saveType
 }

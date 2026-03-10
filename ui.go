@@ -221,10 +221,6 @@ func (m model) viewList() string {
 	return lipgloss.JoinVertical(lipgloss.Left, body, help)
 }
 
-func (m model) renderHeader() string {
-	return ""
-}
-
 // leftWidth returns the outer width for both the encounter panel and spell list.
 func (m model) leftWidth() int {
 	w := m.windowWidth/2 + 4
@@ -685,7 +681,7 @@ func (m model) renderListHelp() string {
 
 func (m model) viewEdit() string {
 	if len(m.spells) == 0 {
-		return m.renderHeader() + "\n" + styleMuted.Render("  No spells.")
+		return styleMuted.Render("  No spells.")
 	}
 
 	entry := &m.spells[m.cursor]

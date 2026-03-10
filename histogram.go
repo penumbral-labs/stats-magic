@@ -7,10 +7,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// blockChars maps heights 0-8 to Unicode block characters.
-// Index 0 = empty (space), 8 = full block.
-var blockChars = [9]string{" ", "\u2581", "\u2582", "\u2583", "\u2584", "\u2585", "\u2586", "\u2587", "\u2588"}
-
 // brailleDotBits maps (row, col) to the bit position in a braille character.
 // Braille cell is 2 cols x 4 rows. Unicode base: U+2800.
 //
@@ -23,40 +19,6 @@ var brailleDotBits = [4][2]byte{
 	{0x02, 0x10}, // row 1
 	{0x04, 0x20}, // row 2
 	{0x40, 0x80}, // row 3 (bottom)
-}
-
-// RenderCompactHistogram renders a sparkline from sampled mixture PDF values.
-func RenderCompactHistogram(pdf []float64, lo, hi float64, width int) string {
-	if len(pdf) == 0 || width <= 0 {
-		return ""
-	}
-
-	values := resamplePDF(pdf, width)
-
-	maxVal := 0.0
-	for _, v := range values {
-		if v > maxVal {
-			maxVal = v
-		}
-	}
-
-	if maxVal <= 0 {
-		return strings.Repeat(" ", width)
-	}
-
-	var sb strings.Builder
-	for _, v := range values {
-		level := int(math.Round(v / maxVal * 8))
-		if level < 0 {
-			level = 0
-		}
-		if level > 8 {
-			level = 8
-		}
-		sb.WriteString(blockChars[level])
-	}
-
-	return sb.String()
 }
 
 // RenderBrailleChart renders a filled area chart using braille characters.

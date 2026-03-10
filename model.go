@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -249,7 +250,11 @@ func initialModel() model {
 	}
 
 	// Try loading saved data
-	if savedEnc, savedSpells, err := loadData(); err == nil && len(savedSpells) > 0 {
+	savedEnc, savedSpells, err := loadData()
+	switch {
+	case err != nil && !os.IsNotExist(err):
+		m.flashText = fmt.Sprintf("Load failed: %v", err)
+	case len(savedSpells) > 0:
 		m.encounter = savedEnc
 		m.encInputs = newEncounterInputs(savedEnc)
 		for _, sp := range savedSpells {
@@ -259,7 +264,6 @@ func initialModel() model {
 		}
 		m.flashText = fmt.Sprintf("Loaded %d spell(s)", len(m.spells))
 	}
-	// Empty state: no default spells, user adds via picker
 
 	m.picker = newPickerModel(m.windowWidth, m.windowHeight)
 	return m

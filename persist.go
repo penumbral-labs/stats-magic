@@ -42,11 +42,6 @@ type savedData struct {
 	Spells    []savedSpell   `json:"spells"`
 }
 
-// flashMsg carries a status message to display briefly.
-type flashMsg struct {
-	text string
-}
-
 // clearFlashMsg signals that the flash message should be cleared.
 type clearFlashMsg struct{}
 
