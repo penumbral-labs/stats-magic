@@ -13,8 +13,6 @@ Set Padding 10
 Set Framerate 24
 Set TypingSpeed 75ms
 
-Require stats-magic
-
 # Build silently
 Hide
 Type "go build -o stats-magic . && clear"
