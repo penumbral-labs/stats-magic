@@ -4,14 +4,14 @@
 
 Output demo.gif
 
-Set FontSize 13
-Set Width 1400
-Set Height 900
-Set FontFamily "JetBrains Mono"
+Set FontSize 14
+Set Width 1200
+Set Height 750
+Set FontFamily "JetBrainsMono Nerd Font"
 Set Theme "Catppuccin Mocha"
 Set Padding 10
 Set Framerate 24
-Set TypingSpeed 75ms
+Set TypingSpeed 50ms
 
 # Build silently
 Hide
@@ -23,102 +23,103 @@ Show
 # Launch
 Type "./stats-magic"
 Enter
-Sleep 1.5s
-
-# Add Fireball from presets
-Type "a"
-Sleep 500ms
-Type "fire"
-Sleep 500ms
-Enter
 Sleep 1s
 
-# Add another spell — Electric Arc
+# Add Fireball
 Type "a"
-Sleep 500ms
-Type "electric"
-Sleep 500ms
+Sleep 300ms
+Type "/fire"
+Sleep 400ms
 Enter
-Sleep 1s
-
-# Add Heal (Harm variant)
-Type "a"
-Sleep 500ms
-Type "harm"
-Sleep 500ms
+Sleep 300ms
 Enter
-Sleep 1s
-
-# Navigate the list
-Down
-Sleep 400ms
-Down
-Sleep 400ms
-Up
-Sleep 400ms
-Up
-Sleep 600ms
-
-# Heighten Fireball
-Type "+"
-Sleep 500ms
-Type "+"
-Sleep 500ms
-Type "+"
 Sleep 800ms
 
-# Select spells for comparison
-Space
+# Add Lightning Bolt
+Type "a"
 Sleep 300ms
-Down
+Type "/light"
+Sleep 400ms
+Enter 2
+Sleep 800ms
+
+# Add Chain Lightning
+Type "a"
 Sleep 300ms
-Space
+Type "/chain"
+Sleep 400ms
+Enter 2
+Sleep 800ms
+
+# Add a Fortitude save spell
+Type "a"
 Sleep 300ms
-Down
+Type "/fort"
+Sleep 400ms
+Enter
 Sleep 300ms
-Space
+Type "j"
+Enter
 Sleep 1s
 
-# Edit encounter parameters
-Tab
-Sleep 500ms
-
-# Change PC level
-Backspace
-Backspace
-Type "10"
-Tab
-Sleep 500ms
-Tab
+# Navigate and select for comparison
+Type " "
 Sleep 300ms
-Tab
+Type "j "
 Sleep 300ms
-
-# Cycle a save profile
-Space
-Sleep 400ms
-Space
-Sleep 400ms
-
-# Done editing encounter
-Escape
+Type "j "
+Sleep 300ms
+Type "j "
 Sleep 1.5s
 
-# Navigate back through spells to show detail
-Up
+# Browse the detail panes
+Type "kk"
+Sleep 800ms
+Type "k"
+Sleep 1.5s
+
+# Heighten Fireball
+Type "++"
+Sleep 500ms
+Type "++"
+Sleep 1.5s
+
+# Edit encounter — change PC level to 10
+Tab
+Sleep 400ms
+Backspace
+Type "10"
+Sleep 400ms
+
+# Tab to save fields, cycle profiles
+Tab 4
+Sleep 400ms
+Type " "
+Sleep 400ms
+Type " "
+Sleep 400ms
+Tab
+Type " "
+Sleep 1s
+
+# Done editing
+Escape
+Sleep 1s
+
+# Navigate to show updated stats
+Type "j"
 Sleep 600ms
-Up
+Type "j"
 Sleep 600ms
 
 # Lower rank back down
-Type "-"
-Sleep 400ms
-Type "-"
-Sleep 600ms
+Type "--"
+Sleep 500ms
+Type "--"
+Sleep 1.5s
 
-# Pause to admire
+# Final pause
 Sleep 2s
 
-# Quit
 Type "q"
-Sleep 500ms
+Sleep 300ms

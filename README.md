@@ -7,8 +7,7 @@
 
 Terminal UI for calculating and comparing PF2e spell damage distributions.
 
-<!-- uncomment after running: vhs demo.tape -->
-<!-- ![Demo](demo.gif) -->
+![Demo](https://vhs.charm.sh/vhs-4PEsZ5TmsRXuELqFi55Q0g.gif)
 
 ## What It Does
 
