@@ -3,7 +3,7 @@
 [![CI](https://github.com/penumbral-labs/stats-magic/actions/workflows/ci.yml/badge.svg)](https://github.com/penumbral-labs/stats-magic/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/penumbral-labs/stats-magic)](https://github.com/penumbral-labs/stats-magic/releases/latest)
 [![Go](https://img.shields.io/github/go-mod/go-version/penumbral-labs/stats-magic)](go.mod)
-[![License](https://img.shields.io/github/license/penumbral-labs/stats-magic)](LICENSE)
+[![License](https://img.shields.io/github/license/penumbral-labs/stats-magic?cacheSeconds=3600)](LICENSE)
 
 Terminal UI for calculating and comparing PF2e spell damage distributions.
 
